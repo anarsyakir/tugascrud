@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutterfire_ui/auth.dart';
+import 'firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 
@@ -14,22 +19,55 @@ class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    const providerConfigs = [EmailProviderConfiguration()];
+
     return MaterialApp(
-      title: 'Toko Cantik - Produk',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
-      ),
-      home: const MyHomePage(title: 'Toko Cantik - Produk'),
+      initialRoute:
+          FirebaseAuth.instance.currentUser == null ? '/sign-in' : '/homepage',
+      routes: {
+        '/sign-in': (context) {
+          return SignInScreen(
+            providerConfigs: providerConfigs,
+            actions: [
+              AuthStateChangeAction<SignedIn>((context, state) {
+                Navigator.pushReplacementNamed(context, '/homepage');
+              }),
+            ],
+          );
+        },
+        '/profile': (context) {
+          return ProfileScreen(
+            providerConfigs: providerConfigs,
+            actions: [
+              SignedOutAction((context) {
+                Navigator.pushReplacementNamed(context, '/sign-in');
+              }),
+            ],
+          );
+        },
+        '/homepage': (context) {
+          return const Scaffold(
+            body: MyStatefulWidget(),
+          );
+        },
+      },
     );
+    // return MaterialApp(
+    //   title: 'Toko Cantik - Produk',
+    //   theme: ThemeData(
+    //     // This is the theme of your application.
+    //     //
+    //     // Try running your application with "flutter run". You'll see the
+    //     // application has a blue toolbar. Then, without quitting the app, try
+    //     // changing the primarySwatch below to Colors.green and then invoke
+    //     // "hot reload" (press "r" in the console where you ran "flutter run",
+    //     // or simply save your changes to "hot reload" in a Flutter IDE).
+    //     // Notice that the counter didn't reset back to zero; the application
+    //     // is not restarted.
+    //     primarySwatch: Colors.blue,
+    //   ),
+    //   home: const MyHomePage(title: 'Toko Cantik - Produk'),
+    // );
   }
 }
 
@@ -146,9 +184,6 @@ class _MyHomePageState extends State<MyHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Toko Cantik - Produk'),
-      ),
       // Using StreamBuilder to display all products from Firestore in real-time
       body: StreamBuilder(
         stream: _productss.snapshots(),
@@ -197,6 +232,87 @@ class _MyHomePageState extends State<MyHomePage> {
         onPressed: () => _createOrUpdate(),
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+class MyStatefulWidget extends StatefulWidget {
+  const MyStatefulWidget({Key? key}) : super(key: key);
+
+  @override
+  State<MyStatefulWidget> createState() => _MyStatefulWidgetState();
+}
+
+class _MyStatefulWidgetState extends State<MyStatefulWidget> {
+  int _selectedIndex = 0;
+  static const TextStyle optionStyle =
+      TextStyle(fontSize: 30, fontWeight: FontWeight.bold);
+  static const List<Widget> _widgetOptions = <Widget>[
+    Text(
+      'Index 0: Home',
+      style: optionStyle,
+    ),
+    MyHomePage(title: 'Product'),
+    MyProfileScreen(),
+  ];
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Toko Cantik'),
+      ),
+      body: Center(
+        child: _widgetOptions.elementAt(_selectedIndex),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: const <BottomNavigationBarItem>[
+          BottomNavigationBarItem(
+            icon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.storefront),
+            label: 'Product',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.account_circle),
+            label: 'Profile',
+          ),
+        ],
+        currentIndex: _selectedIndex,
+        selectedItemColor: Colors.amber[800],
+        onTap: _onItemTapped,
+      ),
+    );
+  }
+}
+
+class MyProfileScreen extends StatefulWidget {
+  const MyProfileScreen({Key? key}) : super(key: key);
+
+  @override
+  State<StatefulWidget> createState() => _MyProfileScreenState();
+}
+
+class _MyProfileScreenState extends State<MyProfileScreen> {
+  static const providerConfigs = [EmailProviderConfiguration()];
+
+  @override
+  Widget build(BuildContext context) {
+    return ProfileScreen(
+      providerConfigs: providerConfigs,
+      actions: [
+        SignedOutAction((context) {
+          Navigator.pushReplacementNamed(context, '/sign-in');
+        }),
+      ],
     );
   }
 }

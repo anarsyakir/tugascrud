@@ -1,5 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'dart:io';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:path/path.dart' as path;
+import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutterfire_ui/auth.dart';
@@ -157,7 +162,8 @@ class _MyHomePageState extends State<MyHomePage> {
                         await _productss.add({
                           "name": name,
                           "price": price,
-                          "description": description
+                          "description": description,
+                          "image": ""
                         });
                       }
 
@@ -214,7 +220,7 @@ class _MyHomePageState extends State<MyHomePage> {
                     title: Text(documentSnapshot['name']),
                     subtitle: Text(documentSnapshot['price'].toString()),
                     trailing: SizedBox(
-                      width: 100,
+                      width: 150,
                       child: Row(
                         children: [
                           // Press this button to edit a single product
@@ -227,6 +233,15 @@ class _MyHomePageState extends State<MyHomePage> {
                               icon: const Icon(Icons.delete),
                               onPressed: () =>
                                   _deleteProduct(documentSnapshot.id)),
+                          IconButton(
+                              icon: const Icon(Icons.image),
+                              onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => ImageListScreen(
+                                          dataSnapshot: documentSnapshot),
+                                    ),
+                                  )),
                         ],
                       ),
                     ),
@@ -376,6 +391,7 @@ class _ProductListState extends State<ProductList> {
                 return Card(
                   margin: const EdgeInsets.all(10),
                   child: ListTile(
+                    leading: Image.network(documentSnapshot['image']),
                     title: Text(documentSnapshot['name']),
                     subtitle: Text(documentSnapshot['price'].toString()),
                     onTap: () {
@@ -431,9 +447,139 @@ class DetailScreen extends StatelessWidget {
                 product['description'],
                 style: TextStyle(color: Colors.black.withOpacity(0.6)),
               ),
-            )
+            ),
+            Image.network(product['image'])
           ],
         ),
+      ),
+    );
+  }
+}
+
+class ImageListScreen extends StatefulWidget {
+  const ImageListScreen({Key? key, required this.dataSnapshot})
+      : super(key: key);
+
+  final DocumentSnapshot dataSnapshot;
+  @override
+  State<ImageListScreen> createState() => _ImageListScreenState();
+}
+
+class _ImageListScreenState extends State<ImageListScreen> {
+  FirebaseStorage storage = FirebaseStorage.instance;
+
+  Stream<QuerySnapshot<Object?>>? _loadSnapshot() {
+    final CollectionReference _productsList = FirebaseFirestore.instance
+        .collection('products')
+        .doc(widget.dataSnapshot.id)
+        .collection('images');
+    return _productsList.snapshots();
+  }
+
+  CollectionReference _loadImages() {
+    final CollectionReference _productsList2 = FirebaseFirestore.instance
+        .collection('products')
+        .doc(widget.dataSnapshot.id)
+        .collection('images');
+    return _productsList2;
+  }
+
+  DocumentReference<Map<String, dynamic>> _thisImages() {
+    final DocumentReference<Map<String, dynamic>> _productsList2 =
+        FirebaseFirestore.instance
+            .collection('products')
+            .doc(widget.dataSnapshot.id);
+    return _productsList2;
+  }
+
+  Future<void> _upload(String inputSource) async {
+    final picker = ImagePicker();
+    XFile? pickedImage;
+    try {
+      pickedImage = await picker.pickImage(
+          source: inputSource == 'camera'
+              ? ImageSource.camera
+              : ImageSource.gallery,
+          maxWidth: 1920);
+
+      final String fileName = path.basename(pickedImage!.path);
+      File imageFile = File(pickedImage.path);
+
+      try {
+        Reference storageReference = storage.ref(fileName);
+        // Uploading the selected image with some custom meta data
+        await storageReference.putFile(imageFile);
+
+        storageReference.getDownloadURL().then((fileURL) {
+          _loadImages().add({"url": fileURL});
+
+          _thisImages().update({"image": fileURL});
+        });
+
+        // Refresh the UI
+        setState(() {});
+      } on FirebaseException catch (error) {
+        if (kDebugMode) {
+          print(error);
+        }
+      }
+    } catch (err) {
+      if (kDebugMode) {
+        print(err);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Add image for " + widget.dataSnapshot['name']),
+      ),
+      // Using StreamBuilder to display all products from Firestore in real-time
+      body: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              ElevatedButton.icon(
+                  onPressed: () => _upload('camera'),
+                  icon: const Icon(Icons.camera),
+                  label: const Text('Camera')),
+              ElevatedButton.icon(
+                  onPressed: () => _upload('gallery'),
+                  icon: const Icon(Icons.library_add),
+                  label: const Text('Gallery'))
+            ],
+          ),
+          Expanded(
+            child: StreamBuilder(
+              stream: _loadSnapshot(),
+              builder: (context, AsyncSnapshot<QuerySnapshot> streamSnapshot) {
+                if (streamSnapshot.hasData) {
+                  return ListView.builder(
+                    itemCount: streamSnapshot.data!.docs.length,
+                    itemBuilder: (context, index) {
+                      final DocumentSnapshot documentSnapshot =
+                          streamSnapshot.data!.docs[index];
+                      return Card(
+                        margin: const EdgeInsets.all(10),
+                        child: ListTile(
+                          leading: Image.network(documentSnapshot['url']),
+                        ),
+                      );
+                    },
+                  );
+                }
+
+                return const Center(
+                  child: CircularProgressIndicator(),
+                );
+              },
+            ),
+          )
+        ]),
       ),
     );
   }

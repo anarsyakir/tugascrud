@@ -93,6 +93,7 @@ class _MyHomePageState extends State<MyHomePage> {
   // text fields' controllers
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
+  final TextEditingController _descriptionController = TextEditingController();
 
   final CollectionReference _productss =
       FirebaseFirestore.instance.collection('products');
@@ -106,6 +107,7 @@ class _MyHomePageState extends State<MyHomePage> {
       action = 'update';
       _nameController.text = documentSnapshot['name'];
       _priceController.text = documentSnapshot['price'].toString();
+      _descriptionController.text = documentSnapshot['name'];
     }
 
     await showModalBottomSheet(
@@ -135,6 +137,10 @@ class _MyHomePageState extends State<MyHomePage> {
                     labelText: 'Price',
                   ),
                 ),
+                TextField(
+                  controller: _descriptionController,
+                  decoration: const InputDecoration(labelText: 'Description'),
+                ),
                 const SizedBox(
                   height: 20,
                 ),
@@ -142,24 +148,32 @@ class _MyHomePageState extends State<MyHomePage> {
                   child: Text(action == 'create' ? 'Create' : 'Update'),
                   onPressed: () async {
                     final String? name = _nameController.text;
+                    final String? description = _descriptionController.text;
                     final double? price =
                         double.tryParse(_priceController.text);
                     if (name != null && price != null) {
                       if (action == 'create') {
                         // Persist a new product to Firestore
-                        await _productss.add({"name": name, "price": price});
+                        await _productss.add({
+                          "name": name,
+                          "price": price,
+                          "description": description
+                        });
                       }
 
                       if (action == 'update') {
                         // Update the product
-                        await _productss
-                            .doc(documentSnapshot!.id)
-                            .update({"name": name, "price": price});
+                        await _productss.doc(documentSnapshot!.id).update({
+                          "name": name,
+                          "price": price,
+                          "description": description
+                        });
                       }
 
                       // Clear the text fields
                       _nameController.text = '';
                       _priceController.text = '';
+                      _descriptionController.text = '';
 
                       // Hide the bottom sheet
                       Navigator.of(context).pop();
@@ -245,15 +259,11 @@ class MyStatefulWidget extends StatefulWidget {
 
 class _MyStatefulWidgetState extends State<MyStatefulWidget> {
   int _selectedIndex = 0;
-  static const TextStyle optionStyle =
-      TextStyle(fontSize: 30, fontWeight: FontWeight.bold);
   static const List<Widget> _widgetOptions = <Widget>[
-    Text(
-      'Index 0: Home',
-      style: optionStyle,
-    ),
+    ProductList(),
     MyHomePage(title: 'Product'),
     MyProfileScreen(),
+    AboutScreen()
   ];
 
   void _onItemTapped(int index) {
@@ -276,14 +286,22 @@ class _MyStatefulWidgetState extends State<MyStatefulWidget> {
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: 'Home',
+            backgroundColor: Colors.blueAccent,
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.storefront),
             label: 'Product',
+            backgroundColor: Colors.blueAccent,
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.account_circle),
             label: 'Profile',
+            backgroundColor: Colors.blueAccent,
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.question_mark),
+            label: 'About',
+            backgroundColor: Colors.blueAccent,
           ),
         ],
         currentIndex: _selectedIndex,
@@ -313,6 +331,110 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
           Navigator.pushReplacementNamed(context, '/sign-in');
         }),
       ],
+    );
+  }
+}
+
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(
+        child: Text(
+            'Copyright 2022 - Rezza Agustin - 19552011362 - TIF K 19 CID B'),
+      ),
+    );
+  }
+}
+
+class ProductList extends StatefulWidget {
+  const ProductList({Key? key}) : super(key: key);
+
+  @override
+  State<ProductList> createState() => _ProductListState();
+}
+
+class _ProductListState extends State<ProductList> {
+  final CollectionReference _productsList =
+      FirebaseFirestore.instance.collection('products');
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      // Using StreamBuilder to display all products from Firestore in real-time
+      body: StreamBuilder(
+        stream: _productsList.snapshots(),
+        builder: (context, AsyncSnapshot<QuerySnapshot> streamSnapshot) {
+          if (streamSnapshot.hasData) {
+            return ListView.builder(
+              itemCount: streamSnapshot.data!.docs.length,
+              itemBuilder: (context, index) {
+                final DocumentSnapshot documentSnapshot =
+                    streamSnapshot.data!.docs[index];
+                return Card(
+                  margin: const EdgeInsets.all(10),
+                  child: ListTile(
+                    title: Text(documentSnapshot['name']),
+                    subtitle: Text(documentSnapshot['price'].toString()),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              DetailScreen(product: documentSnapshot),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            );
+          }
+
+          return const Center(
+            child: CircularProgressIndicator(),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class DetailScreen extends StatelessWidget {
+  const DetailScreen({Key? key, required this.product}) : super(key: key);
+
+  final DocumentSnapshot product;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Detail " + product['name']),
+      ),
+      body: Card(
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.arrow_drop_down_circle),
+              title: Text(product['name']),
+              subtitle: Text(
+                'Rp. ' + product['price'].toString(),
+                style: TextStyle(color: Colors.black.withOpacity(0.6)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text(
+                product['description'],
+                style: TextStyle(color: Colors.black.withOpacity(0.6)),
+              ),
+            )
+          ],
+        ),
+      ),
     );
   }
 }
